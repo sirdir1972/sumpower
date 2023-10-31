@@ -20,20 +20,19 @@ var ConfigData = {
     { name: "shelly.1.shelly1pmmini#348518e05eb8#1.Relay0.Power", desc:"Starlink"},
     { name: "shelly.1.shelly1pmmini#348518e04d7c#1.Relay0.Power", desc: 'Electronics lr'},
     { name: "hass.0.entities.sensor.all_lights_power.state", desc: 'all lights'}],
- 
     SolarSystem: [ { name: "solax.0.data.acpower", desc: "Solax"},
     { name: "shelly.0.SHPLG-S#C8C9A3B8F93A#1.Relay0.Power", desc: "Yusun"}, 
     { name: "hass.0.entities.sensor.wifi_plug_power.state", desc: "Grid Tie Inverter"}], // 2 Solarsysteme
     FeedInMaxNow: false,                                 // Jetzt einspeisen was geht, z.B. weil Herd an ist
-    BasePower: 165,                                     //wird zum gemessenen Verbrauch hinzugerechnet
+    BasePower: 165,                                      //wird zum gemessenen Verbrauch hinzugerechnet
     Extra: 0,                                            // wird am Ende dazugezählt (auch wenn eigentlich Einspeisung 0)
     DeviceToSwitch: "shelly.0.SHSW-PM#E09806A9C0D4#1.Relay0.Switch",           // device to switch on when there is excess of solar power
     DescDeviceToSwitch: 'Ecoflow',                		// description of device to switch
-    ExcessNeeded : -225,                                 // this much excess is needed to first switch device on
+    ExcessNeeded : -225,                                // this much excess is needed to first switch device on
     Keepon : false,                                     // keep switch on if PV is generating enough energy(not sure this works)
     EnableSwitching: false,                             // soll das device überhaupt geswitched werden
     SolarChargeWatts: 200,                              // über solar lade x watt
-    ACChargeWatts: 800,                                 // über AC y
+    ACChargeWatts: 800,                                 // über AC y watt laden
     SetWattsProperty: '0_userdata.0.ecoflow.app_1614754804069380098_R351ZEB4HF3A0360_thing_property_set.writeables.slowChgWatts', // hier wird der watt wert gesetzt
     PauseChargeProperty: '0_userdata.0.ecoflow.app_1614754804069380098_R351ZEB4HF3A0360_thing_property_set.writeables.chgPauseFlag', // hier wird pause charge gesetzt
     MaxPower: 800,                                      //Der höchst mögliche wert in Watt für die Einspeiseleistung
@@ -51,48 +50,14 @@ var ConfigData = {
     Debug: false
 };
 
+//objekte initialisieren oder erstellen
 
-let mvm = ConfigData.statesPrefix + '.MinValueMin';
-            if (!existsState(mvm)) {
-                createState(mvm, ConfigData.MinValueMin);
-            } else {
-                setState(mvm, ConfigData.MinValueMin);
-            }
-
-let atbl = ConfigData.statesPrefix + '.AddtoBaseLoad';
-            if (!existsState(atbl)) {
-                createState(atbl, ConfigData.AddtoBaseload);
-            } else {
-                setState(atbl, ConfigData.AddtoBaseload);
-            }
-            
- let fimn = ConfigData.statesPrefix + '.FeedInMaxNow';
-            if (!existsState(fimn)) {
-                createState(fimn, ConfigData.FeedInMaxNow);
-            } else {
-                setState(fimn, ConfigData.FeedInMaxNow);
-            }
-
- let bp = ConfigData.statesPrefix + '.BasePower';
-            if (!existsState(bp)) {
-                createState(bp, ConfigData.BasePower);
-            } else {
-                setState(bp, ConfigData.BasePower);
-            }
-
-let ex = ConfigData.statesPrefix + '.Extra';
-            if (!existsState(ex)) {
-                createState(ex, ConfigData.Extra);
-            } else {
-                setState(ex, ConfigData.Extra);
-            }
-
-let dbg = ConfigData.statesPrefix + '.Debug';
-            if (!existsState(dbg)) {
-                createState(dbg,ConfigData.Debug);
-            } else {
-                setState(dbg, ConfigData.Debug)
-            }
+initMyObject (".MinValueMin", ConfigData.MinValueMin)
+initMyObject (".AddtoBaseLoad", ConfigData.AddToBaseloads)
+initMyObject (".FeedInMaxNow", ConfigData.FeedInMaxNow)
+initMyObject (".BasePower", ConfigData.BasePower)
+initMyObject (".Extra", ConfigData.Extra)
+initMyObject (".Debug", ConfigData.Debug)
             
 schedule('*/4 * * * * *', function () {
             CalcPower();
@@ -271,4 +236,14 @@ function CalcPower() {
             //}
              if (debug) log (deviceDesc + ": " + devicePower + " W");
 return { devicePower, deviceDesc };
- }
+}
+
+function initMyObject(myObject, myValue)
+{
+    let myvar = ConfigData.statesPrefix + myObject 
+            if(!existsState(myvar)) {
+                createState(myvar, myValue)
+            } else {
+                setState(myvar, myValue)
+            }
+}
