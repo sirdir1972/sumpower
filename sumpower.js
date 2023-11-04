@@ -36,7 +36,7 @@ var ConfigData = {
     ACChargeWatts: 800,                                 // über AC y watt laden
     SetWattsProperty: '0_userdata.0.ecoflow.app_thing_property_set.writeables.slowChgWatts', // hier wird der watt wert gesetzt
     MaxPower: 800,                                      //Der höchst mögliche wert in Watt für die Einspeiseleistung
-    statesPrefix: "0_userdata.0.mypower",               //Hier werden meine States angelegt
+    statesPrefix: "0_userdata.0.sumpower",               //Hier werden meine States angelegt
     ecostatesPrefix: "0_userdata.0.ecoflow.app_device_property_.data.InverterHeartbeat.invOutputWatts", // hier wird Einspeisung gesetzt
     DoSleepFrom: 1,                                     // nix tun von 
     DoSleepTo: 7,                                       // bis
