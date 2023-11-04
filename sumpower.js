@@ -1,4 +1,4 @@
-// ver 0.89 27.10.2023 by EVPaddy
+// ver 0.90 03.11.2023 by EVPaddy
 var ConfigData = {
     SmartmeterID: [{ name: "shelly.0.SHPLG-S#80646F81DFEE#1.Relay0.Power", desc: 'Bedroom Patrick'},  // Liste der Sensoren und Beschreibung
     { name: "shelly.0.SHPLG-S#80646F81E50A#1.Relay0.Power", desc: 'Guestroom'},
@@ -34,7 +34,6 @@ var ConfigData = {
     SolarChargeWatts: 200,                              // über solar lade x watt
     ACChargeWatts: 800,                                 // über AC y watt laden
     SetWattsProperty: '0_userdata.0.ecoflow.app_1614754804069380098_R351ZEB4HF3A0360_thing_property_set.writeables.slowChgWatts', // hier wird der watt wert gesetzt
-    PauseChargeProperty: '0_userdata.0.ecoflow.app_1614754804069380098_R351ZEB4HF3A0360_thing_property_set.writeables.chgPauseFlag', // hier wird pause charge gesetzt
     MaxPower: 800,                                      //Der höchst mögliche wert in Watt für die Einspeiseleistung
     statesPrefix: "0_userdata.0.mypower",               //Hier werden meine States angelegt
     ecostatesPrefix: "0_userdata.0.ecoflow.app_device_property_HW51ZEH4SF5R3047.data.InverterHeartbeat.invOutputWatts", // hier wird Einspeisung gesetzt
@@ -44,8 +43,8 @@ var ConfigData = {
     Wless: -5,                                          // ignoriere bis -5W Verbrauch (damit nicht dauernd neue Werte gesetzt werden)
     MinValueMin: 0,
     AddToBaseloads: [
-    { AddToBaseloadFrom: "20", AddToBaseloadTo: "0", AddToBaseLoad: "20"}, // zu verschiedenen Zeiten können verschiedene Werte zusätzlich eingespeist werden
-    { AddToBaseloadFrom: "0", AddToBaseloadTo: "1", AddToBaseLoad: "20"},
+    { AddToBaseloadFrom: "20", AddToBaseloadTo: "0", AddToBaseLoad: "60"}, // zu verschiedenen Zeiten können verschiedene Werte zusätzlich eingespeist werden
+    { AddToBaseloadFrom: "0", AddToBaseloadTo: "1", AddToBaseLoad: "60"},
     { AddToBaseloadFrom: "1", AddToBaseloadTo: "20", AddToBaseLoad: "0"}],
     Debug: false
 };
@@ -53,7 +52,7 @@ var ConfigData = {
 //objekte initialisieren oder erstellen
 
 initMyObject (".MinValueMin", ConfigData.MinValueMin)
-initMyObject (".AddtoBaseLoad", ConfigData.AddToBaseloads)
+initMyObject (".AddtoBaseLoad", 0)
 initMyObject (".FeedInMaxNow", ConfigData.FeedInMaxNow)
 initMyObject (".BasePower", ConfigData.BasePower)
 initMyObject (".Extra", ConfigData.Extra)
@@ -71,6 +70,7 @@ var power = 0
 var powerss = 0
 var State = false
 var pv = 0
+var sleeping = false
 function CalcPower() {
         const myDate = new Date();
         const myHour = toInt(myDate.getHours().toString().padStart(2, "0"));
@@ -83,7 +83,9 @@ function CalcPower() {
                 setState(time, myHour + ':' + myMinute + ':' + mySec );
             }
         const debug = getState(ConfigData.statesPrefix + '.Debug').val;
-       
+       if (myHour > (toInt(ConfigData.DoSleepFrom)-1) && myHour < (toInt(ConfigData.DoSleepTo))) {    // If sleeping, don't feed in anything
+        sleeping = true
+       }
         pv = getState('0_userdata.0.ecoflow.totalPV').val
         let baseload = toInt(getState(ConfigData.statesPrefix + '.BasePower').val)
         if (debug) log ("Plugs:")
@@ -130,17 +132,15 @@ function CalcPower() {
         } else {
              if (debug) log ("Current demand: " +  NewValue + ' W');
         }    
-        if (ConfigData.EnableSwitching == true) {
+        if (ConfigData.EnableSwitching == true && sleeping == false) {
            let localDeviceToSwitch= ConfigData.DeviceToSwitch
             if (localDeviceToSwitch != "") {
             State = getState(localDeviceToSwitch).val
             if (NewValue < toFloat(ConfigData.ExcessNeeded)) {
                 if (State == false) {
                  if (debug) log ('Excess big enough, switching device ' + ConfigData.DescDeviceToSwitch + ' on')
-                 setState(ConfigData.PauseChargeProperty, 1)
-                sleep(100)
                  setState(ConfigData.SetWattsProperty, ConfigData.SolarChargeWatts)
-                setState(localDeviceToSwitch,true)
+                 setState(localDeviceToSwitch,true)
                 } else {
                      if (debug) log ('Device ' + ConfigData.DescDeviceToSwitch + ' still on')
                 }
@@ -148,10 +148,8 @@ function CalcPower() {
                 if (State == true ) {
                     if (NewValue > -10) {
                     if (((-1 * pv) <= toFloat(ConfigData.ExcessNeeded)) && ConfigData.Keepon == true  ) {
-                             if (debug) log ('Powerstream macht aucnoch genug, device bleibt an')
+                             if (debug) log ('Powerstream macht noch genug, device bleibt an')
                         } else {      
-                            setState(ConfigData.PauseChargeProperty, 1)
-                            sleep (100)
                             setState(ConfigData.SetWattsProperty, ConfigData.ACChargeWatts)
                             setState(localDeviceToSwitch,false )
                              if (debug) log ('Excess too small or no excess, switching device ' +  ConfigData.DescDeviceToSwitch + ' off')
@@ -200,11 +198,11 @@ function CalcPower() {
         }
         NewValue = NewValue - feedInAlready 
 
-        if (NewValue >ConfigData.Wless && NewValue < ConfigData.Wmore) {NewValue=0}
+        if (NewValue >ConfigData.Wless && NewValue < ConfigData.Wmore) {NewValue=0}     // ignore Values that are >Wless and < Wmore
         if (debug) log ('Feed in currently ' + feedInAlready + ' W')
         if (debug) log ('demand delta: ' + NewValue + 'W')   
 
-         if (myHour > (toInt(ConfigData.DoSleepFrom)-1) && myHour < (toInt(ConfigData.DoSleepTo))) {
+         if (sleeping) {
             if (ConfigData.Debug) log ('Sleeping until ' + ConfigData.DoSleepTo)
             NewValue = -feedInAlready
             } 
