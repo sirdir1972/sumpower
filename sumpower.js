@@ -23,6 +23,7 @@ var ConfigData = {
     SolarSystem: [ { name: "solax.0.data.acpower", desc: "Solax"},
     { name: "shelly.0.SHPLG-S#C8C9A3B8F93A#1.Relay0.Power", desc: "Yusun"}, 
     { name: "hass.0.entities.sensor.wifi_plug_power.state", desc: "Grid Tie Inverter"}], // 2 Solarsysteme
+    RunEvery: 4,                                         // Alle x Sekunden ausführen
     FeedInMaxNow: false,                                 // Jetzt einspeisen was geht, z.B. weil Herd an ist
     BasePower: 165,                                      //wird zum gemessenen Verbrauch hinzugerechnet
     Extra: 0,                                            // wird am Ende dazugezählt (auch wenn eigentlich Einspeisung 0)
@@ -33,10 +34,10 @@ var ConfigData = {
     EnableSwitching: false,                             // soll das device überhaupt geswitched werden
     SolarChargeWatts: 200,                              // über solar lade x watt
     ACChargeWatts: 800,                                 // über AC y watt laden
-    SetWattsProperty: '0_userdata.0.ecoflow..writeables.slowChgWatts', // hier wird der watt wert gesetzt
+    SetWattsProperty: '0_userdata.0.ecoflow.app_thing_property_set.writeables.slowChgWatts', // hier wird der watt wert gesetzt
     MaxPower: 800,                                      //Der höchst mögliche wert in Watt für die Einspeiseleistung
     statesPrefix: "0_userdata.0.mypower",               //Hier werden meine States angelegt
-    ecostatesPrefix: "0_userdata.0.ecoflow.app_device_property_XX.data.InverterHeartbeat.invOutputWatts", // hier wird Einspeisung gesetzt
+    ecostatesPrefix: "0_userdata.0.ecoflow.app_device_property_.data.InverterHeartbeat.invOutputWatts", // hier wird Einspeisung gesetzt
     DoSleepFrom: 1,                                     // nix tun von 
     DoSleepTo: 7,                                       // bis
     Wmore: 10,                                          // ignoriere +10W Verbrauch
@@ -57,8 +58,9 @@ initMyObject (".FeedInMaxNow", ConfigData.FeedInMaxNow)
 initMyObject (".BasePower", ConfigData.BasePower)
 initMyObject (".Extra", ConfigData.Extra)
 initMyObject (".Debug", ConfigData.Debug)
-            
-schedule('*/4 * * * * *', function () {
+
+const schedstring = '*/' + ConfigData.RunEvery + ' * * * * *' 
+schedule(schedstring, function () {
             CalcPower();
 });
 
