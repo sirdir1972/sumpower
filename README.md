@@ -12,7 +12,7 @@ Variables:
 **DeviceToSwitch**: object to switch on (set true)  
 **DescDeviceToSwitch**: description of that object  
 **ExcessNeeded**: excess needed to switch device on (normally a negative number). Once the device is on, it stays on as long as there is more excess. 
-**Keepon**: if true, keep it on when Powerstream generates enough power, but the excess of other solar systems isn't enough  
+**Keepon**: if true, keep it on when Powerstream generates enough power, but the excess of other solar systems isn't enough    
 **EnableSwitching**: device is only switched on/off when thi is true  
 **SolarChargeWatts**: set SetWattsProperty to x (to charge i.E. Ecoflow battery with x watts when charged by solar excess  
 **ACChargeWatts**: when not charging by script/solar excess, set charging speed to this  
