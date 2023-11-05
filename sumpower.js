@@ -1,4 +1,4 @@
-// ver 0.91 05.11.2023 by EVPaddy
+// ver 0.90 03.11.2023 by EVPaddy
 var ConfigData = {
     SmartmeterID: [{ name: "shelly.0.SHPLG-S#80646F81DFEE#1.Relay0.Power", desc: 'Bedroom Patrick'},  // Liste der Sensoren und Beschreibung
     { name: "shelly.0.SHPLG-S#80646F81E50A#1.Relay0.Power", desc: 'Guestroom'},
@@ -34,13 +34,13 @@ var ConfigData = {
     EnableSwitching: false,                             // soll das device überhaupt geswitched werden
     SolarChargeWatts: 200,                              // über solar lade x watt
     ACChargeWatts: 800,                                 // über AC y watt laden
-    SetWattsProperty: '0_userdata.0.ecoflow.app__thing_property_set.writeables.slowChgWatts', // hier wird der watt wert gesetzt
+    SetWattsProperty: '0_userdata.0.ecoflow..writeables.slowChgWatts', // hier wird der watt wert gesetzt
     MaxPower: 800,                                      //Der höchst mögliche wert in Watt für die Einspeiseleistung
     statesPrefix: "0_userdata.0.sumpower",               //Hier werden meine States angelegt
     ecostatesOutput: "0_userdata.0.ecoflow..data.InverterHeartbeat.invOutputWatts", // hier wird Einspeisung gelesen
     ecostatesSetAC: "0_userdata.0.ecoflow..writeables.SetAC", // hier wird Einspeisung gesetzt 
     ecostateRegulate: "0_userdata.0.ecoflow.Regulate", // Waly_de's Script ein/ausschalten
-    ecostatesSetprio: "0_userdata.0.ecoflow.writeables.SetPrio", // set prio einspeisung oder storage
+    ecostatesSetprio: "0_userdata.0.ecoflow..writeables.SetPrio", // set prio einspeisung oder storage
     DoSleepFrom: 1,                                     // nix tun von 
     DoSleepTo: 7,                                       // bis
     Wmore: 10,                                          // ignoriere +10W Verbrauch
@@ -73,7 +73,6 @@ schedule(schedstring, function () {
 });
 
 //Einspeiseleistung berechnen und bei Änderung setzen
-var weControlDevice = false
 var NewValue = 0
 var id = []
 var ss = []
@@ -165,18 +164,17 @@ function CalcPower() {
             var localSolarChargeWatts = toInt(getState(ConfigData.statesPrefix + ".SolarChargeWatts").val)
             var localSolarExcess = localSolarChargeWatts + ConfigData.SolarExcessOffset
             var localSolarChargeWattsAlreadySet = getState(ConfigData.SetWattsProperty).val
-            if (NewValue < toFloat(localSolarExcess)) {
+            if (NewValue < toFloat(0-localSolarExcess)) {
                 if (State == false) {
                  if (debug) log ('Excess big enough, switching device ' + ConfigData.DescDeviceToSwitch + ' on')                
                  setState(localDeviceToSwitch,true)
-                 weControlDevice = true
                 } else {
                      if (debug) log ('Device ' + ConfigData.DescDeviceToSwitch + ' still on')
                 }
             } else { 
                 if (State == true ) {
                     if (NewValue > -10) {
-                    if (((-1 * pv) <= toFloat(localSolarChargeWatts)) && ConfigData.Keepon == true  ) {
+                    if (((-1 * pv) <= toFloat(0-localSolarChargeWatts)) && ConfigData.Keepon == true  ) {
                              if (debug) log ('Powerstream macht noch genug, device bleibt an')
                         } else {      
                             SetChargeWatts(ConfigData.ACChargeWatts,0,true)
@@ -192,7 +190,6 @@ function CalcPower() {
             }
             }
         }
-        log (weControlDevice + " " + State)
         SetChargeWatts(localSolarChargeWatts, localSolarChargeWattsAlreadySet,State)
         const extra = toInt(getState(ConfigData.statesPrefix + '.Extra').val)
         if (extra != 0) {
