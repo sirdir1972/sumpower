@@ -1,4 +1,4 @@
-// ver 0.90 03.11.2023 by EVPaddy
+// ver 0.91 05.11.2023 by EVPaddy
 var ConfigData = {
     SmartmeterID: [{ name: "shelly.0.SHPLG-S#80646F81DFEE#1.Relay0.Power", desc: 'Bedroom Patrick'},  // Liste der Sensoren und Beschreibung
     { name: "shelly.0.SHPLG-S#80646F81E50A#1.Relay0.Power", desc: 'Guestroom'},
@@ -29,15 +29,18 @@ var ConfigData = {
     Extra: 0,                                            // wird am Ende dazugezählt (auch wenn eigentlich Einspeisung 0)
     DeviceToSwitch: "shelly.0.SHSW-PM#E09806A9C0D4#1.Relay0.Switch",           // device to switch on when there is excess of solar power
     DescDeviceToSwitch: 'Ecoflow',                		// description of device to switch
-    ExcessNeeded : -225,                                // this much excess is needed to first switch device on
+    SolarExcessOffset : 25,                                // this much excess is needed to first switch device on
     Keepon : false,                                     // keep switch on if PV is generating enough energy(not sure this works)
     EnableSwitching: false,                             // soll das device überhaupt geswitched werden
     SolarChargeWatts: 200,                              // über solar lade x watt
     ACChargeWatts: 800,                                 // über AC y watt laden
-    SetWattsProperty: '0_userdata.0.ecoflow.app_thing_property_set.writeables.slowChgWatts', // hier wird der watt wert gesetzt
+    SetWattsProperty: '0_userdata.0.ecoflow.app__thing_property_set.writeables.slowChgWatts', // hier wird der watt wert gesetzt
     MaxPower: 800,                                      //Der höchst mögliche wert in Watt für die Einspeiseleistung
     statesPrefix: "0_userdata.0.sumpower",               //Hier werden meine States angelegt
-    ecostatesPrefix: "0_userdata.0.ecoflow.app_device_property_.data.InverterHeartbeat.invOutputWatts", // hier wird Einspeisung gesetzt
+    ecostatesOutput: "0_userdata.0.ecoflow..data.InverterHeartbeat.invOutputWatts", // hier wird Einspeisung gelesen
+    ecostatesSetAC: "0_userdata.0.ecoflow..writeables.SetAC", // hier wird Einspeisung gesetzt 
+    ecostateRegulate: "0_userdata.0.ecoflow.Regulate", // Waly_de's Script ein/ausschalten
+    ecostatesSetprio: "0_userdata.0.ecoflow.writeables.SetPrio", // set prio einspeisung oder storage
     DoSleepFrom: 1,                                     // nix tun von 
     DoSleepTo: 7,                                       // bis
     Wmore: 10,                                          // ignoriere +10W Verbrauch
@@ -58,13 +61,19 @@ initMyObject (".FeedInMaxNow", ConfigData.FeedInMaxNow)
 initMyObject (".BasePower", ConfigData.BasePower)
 initMyObject (".Extra", ConfigData.Extra)
 initMyObject (".Debug", ConfigData.Debug)
-
+initMyObject (".EnableSwitching", ConfigData.EnableSwitching)
+initMyObject (".SolarChargeWatts",ConfigData.SolarChargeWatts)
+// setState(ConfigData.ecostatesSetprio,0) // make sure regulation is power delivery 
+setState(ConfigData.ecostateRegulate,true) // make sure regulate is on 
+//setState(ConfigData.SetWattsProperty, ConfigData.ACChargeWatts) // set device to charge off on restart
+//setState(ConfigData.DeviceToSwitch,false )
 const schedstring = '*/' + ConfigData.RunEvery + ' * * * * *' 
 schedule(schedstring, function () {
             CalcPower();
 });
 
 //Einspeiseleistung berechnen und bei Änderung setzen
+var weControlDevice = false
 var NewValue = 0
 var id = []
 var ss = []
@@ -86,8 +95,22 @@ function CalcPower() {
             }
         const debug = getState(ConfigData.statesPrefix + '.Debug').val;
        if (myHour > (toInt(ConfigData.DoSleepFrom)-1) && myHour < (toInt(ConfigData.DoSleepTo))) {    // If sleeping, don't feed in anything
+        if (sleeping == false) {
+            setState(ConfigData.ecostatesSetAC, '0')
+            setState(ConfigData.ecostateRegulate,false)
+            setState(ConfigData.ecostatesSetprio,'1')
+            if (ConfigData.Debug) log ('going to sleep now')
+        }
         sleeping = true
-       }
+        if (ConfigData.Debug) log ('Sleeping until ' + ConfigData.DoSleepTo)        
+       } else {
+            if (sleeping == true) {
+                setState(ConfigData.ecostatesSetprio,'0')
+                setState(ConfigData.ecostateRegulate,true)
+                if (ConfigData.Debug) log ('waking up now')
+            }
+            sleeping = false
+        }            
         pv = getState('0_userdata.0.ecoflow.totalPV').val
         let baseload = toInt(getState(ConfigData.statesPrefix + '.BasePower').val)
         if (debug) log ("Plugs:")
@@ -134,31 +157,34 @@ function CalcPower() {
         } else {
              if (debug) log ("Current demand: " +  NewValue + ' W');
         }    
-        if (ConfigData.EnableSwitching == true && sleeping == false) {
+        var es = getState(ConfigData.statesPrefix + '.EnableSwitching').val;
+        if (es == true && sleeping == false) {
            let localDeviceToSwitch= ConfigData.DeviceToSwitch
             if (localDeviceToSwitch != "") {
             State = getState(localDeviceToSwitch).val
-            if (NewValue < toFloat(ConfigData.ExcessNeeded)) {
+            var localSolarChargeWatts = toInt(getState(ConfigData.statesPrefix + ".SolarChargeWatts").val)
+            var localSolarExcess = localSolarChargeWatts + ConfigData.SolarExcessOffset
+            var localSolarChargeWattsAlreadySet = getState(ConfigData.SetWattsProperty).val
+            if (NewValue < toFloat(localSolarExcess)) {
                 if (State == false) {
-                 if (debug) log ('Excess big enough, switching device ' + ConfigData.DescDeviceToSwitch + ' on')
-                 setState(ConfigData.SetWattsProperty, ConfigData.SolarChargeWatts)
+                 if (debug) log ('Excess big enough, switching device ' + ConfigData.DescDeviceToSwitch + ' on')                
                  setState(localDeviceToSwitch,true)
+                 weControlDevice = true
                 } else {
                      if (debug) log ('Device ' + ConfigData.DescDeviceToSwitch + ' still on')
                 }
             } else { 
                 if (State == true ) {
                     if (NewValue > -10) {
-                    if (((-1 * pv) <= toFloat(ConfigData.ExcessNeeded)) && ConfigData.Keepon == true  ) {
+                    if (((-1 * pv) <= toFloat(localSolarChargeWatts)) && ConfigData.Keepon == true  ) {
                              if (debug) log ('Powerstream macht noch genug, device bleibt an')
                         } else {      
-                            setState(ConfigData.SetWattsProperty, ConfigData.ACChargeWatts)
+                            SetChargeWatts(ConfigData.ACChargeWatts,0,true)
                             setState(localDeviceToSwitch,false )
                              if (debug) log ('Excess too small or no excess, switching device ' +  ConfigData.DescDeviceToSwitch + ' off')
                         }
                     } else { 
-                         if (debug) log ('still some excess, keeping device ' +  ConfigData.DescDeviceToSwitch +  ' on')
-                    
+                        if (debug) log ('still some excess, keeping device ' +  ConfigData.DescDeviceToSwitch +  ' on')                        
                     }
                 } else {
                      if (debug) log ('still not enough power to switch on device ' +  ConfigData.DescDeviceToSwitch )
@@ -166,17 +192,19 @@ function CalcPower() {
             }
             }
         }
+        log (weControlDevice + " " + State)
+        SetChargeWatts(localSolarChargeWatts, localSolarChargeWattsAlreadySet,State)
         const extra = toInt(getState(ConfigData.statesPrefix + '.Extra').val)
         if (extra != 0) {
             if (NewValue < 0 ){
-            if (debug) log ('Extra: ' + extra)
-            NewValue = extra
+                NewValue = extra
             } else
             {
             NewValue = NewValue + extra
             }
+            if (debug) log ('Extra: ' + extra)
         }
-        const feedinginalradyState = ConfigData.ecostatesPrefix;
+        const feedinginalradyState = ConfigData.ecostatesOutput;
         let feedInAlready = toInt(getState(feedinginalradyState).val) / 10 
 
        
@@ -204,18 +232,18 @@ function CalcPower() {
         if (debug) log ('Feed in currently ' + feedInAlready + ' W')
         if (debug) log ('demand delta: ' + NewValue + 'W')   
 
-         if (sleeping) {
-            if (ConfigData.Debug) log ('Sleeping until ' + ConfigData.DoSleepTo)
-            NewValue = -feedInAlready
-            } 
-            let totalPowerState = ConfigData.statesPrefix + '.totalPower';
-            if (!existsState(totalPowerState)) {
-                createState(totalPowerState, toInt(NewValue));
-            } else {
+        //if (sleeping) {
+        //    if (ConfigData.Debug) log ('Sleeping until ' + ConfigData.DoSleepTo)
+        //    NewValue = -feedInAlready
+        //} 
+        let totalPowerState = ConfigData.statesPrefix + '.totalPower';
+        if (!existsState(totalPowerState)) {
+            createState(totalPowerState, toInt(NewValue));
+        } else {
             setState(totalPowerState, toInt(NewValue));
-            }
-            
-        }   
+        
+        }        
+    }   
 
 
  function GetValuePair(deviceunit,devicedescription) {
@@ -244,6 +272,21 @@ function initMyObject(myObject, myValue)
             if(!existsState(myvar)) {
                 createState(myvar, myValue)
             } else {
-                setState(myvar, myValue)
+ //               setState(myvar, myValue)
             }
+
+
+}
+
+function SetChargeWatts (ChargeWatts, ChargeWattsAlready,State)
+{
+    const debug = getState(ConfigData.statesPrefix + '.Debug').val;
+    if (State == true) {
+               if (ChargeWatts != ChargeWattsAlready) {
+               if (ConfigData.SetWattsProperty != "" ) {
+                   setState(ConfigData.SetWattsProperty, ChargeWatts)
+                    if (debug) log ("setteting charge to: " + ChargeWatts)
+                }
+               }
+            } 
 }
