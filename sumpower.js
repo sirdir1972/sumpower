@@ -1,16 +1,7 @@
-// ver 0.90 03.11.2023 by EVPaddy
+// ver 0.91 6.11.2023 by EVPaddy
 var ConfigData = {
     SmartmeterID: [{ name: "shelly.0.SHPLG-S#80646F81DFEE#1.Relay0.Power", desc: 'Bedroom Patrick'},  // Liste der Sensoren und Beschreibung
     { name: "shelly.0.SHPLG-S#80646F81E50A#1.Relay0.Power", desc: 'Guestroom'},
-    { name: "shelly.0.SHSW-PM#68C63AFB62D3#1.Relay0.Power", desc: 'Fridge'}, 
-    { name: "shelly.0.SHPLG-S#C8C9A3B8C14F#1.Relay0.Power", desc: 'Kettle'},
-    { name: "shelly.0.SHPLG-S#3CE90ED7B2D6#1.Relay0.Power", desc: 'Water pump'},
-    { name: "shelly.0.SHSW-L#84CCA8AE4D47#1.Relay0.Power", desc: 'Chandelier'},
-    { name: "shelly.0.SHSW-L#8CAAB561CB2B#1.Relay0.Power", desc: 'Garage light'},
-    { name: "shelly.0.SHSW-PM#68C63AFB717D#1.Relay0.Power", desc: 'Boiler'},
-    { name: "shelly.0.SHPLG-S#80646F8283E3#1.Relay0.Power", desc: 'Microwave'},
-    { name: "shelly.0.SHPLG-S#80646F810000#1.Relay0.Power", desc: 'Toaster'},
-    { name: "shelly.0.SHPLG-S#80646F83DE0A#1.Relay0.Power", desc: 'Misc'},
     { name: "shelly.0.SHSW-PM#E09806A9C0D4#1.Relay0.Power", desc: 'Charge Ecoflow'},
     { name: "hass.0.entities.sensor.anti_mosquito_guestroom_power.state", desc: "Anti moquito Guestroom"},
     { name: "hass.0.entities.sensor.muckenschutz_wohnzimmer_current_power.state",desc:"Anti mosquito lr"},
@@ -34,13 +25,13 @@ var ConfigData = {
     EnableSwitching: false,                             // soll das device überhaupt geswitched werden
     SolarChargeWatts: 200,                              // über solar lade x watt
     ACChargeWatts: 800,                                 // über AC y watt laden
-    SetWattsProperty: '0_userdata.0.ecoflow..writeables.slowChgWatts', // hier wird der watt wert gesetzt
+    SetWattsProperty: '0_userdata.0.ecoflow.app__thing_property_set.writeables.slowChgWatts', // hier wird der watt wert gesetzt
     MaxPower: 800,                                      //Der höchst mögliche wert in Watt für die Einspeiseleistung
     statesPrefix: "0_userdata.0.sumpower",               //Hier werden meine States angelegt
-    ecostatesOutput: "0_userdata.0.ecoflow..data.InverterHeartbeat.invOutputWatts", // hier wird Einspeisung gelesen
-    ecostatesSetAC: "0_userdata.0.ecoflow..writeables.SetAC", // hier wird Einspeisung gesetzt 
+    ecostatesOutput: "0_userdata.0.ecoflow.app_device_property_.data.InverterHeartbeat.invOutputWatts", // hier wird Einspeisung gelesen
+    ecostatesSetAC: "0_userdata.0.ecoflow.app__thing_property_set.writeables.SetAC", // hier wird Einspeisung gesetzt 
     ecostateRegulate: "0_userdata.0.ecoflow.Regulate", // Waly_de's Script ein/ausschalten
-    ecostatesSetprio: "0_userdata.0.ecoflow..writeables.SetPrio", // set prio einspeisung oder storage
+    ecostatesSetprio: "0_userdata.0.ecoflow.app__thing_property_set.writeables.SetPrio", // set prio einspeisung oder storage
     DoSleepFrom: 1,                                     // nix tun von 
     DoSleepTo: 7,                                       // bis
     Wmore: 10,                                          // ignoriere +10W Verbrauch
@@ -63,6 +54,9 @@ initMyObject (".Extra", ConfigData.Extra)
 initMyObject (".Debug", ConfigData.Debug)
 initMyObject (".EnableSwitching", ConfigData.EnableSwitching)
 initMyObject (".SolarChargeWatts",ConfigData.SolarChargeWatts)
+initMyObject (".DeviceControlled", false)
+initMyObject (".ControlScriptDebug", false)
+
 // setState(ConfigData.ecostatesSetprio,0) // make sure regulation is power delivery 
 setState(ConfigData.ecostateRegulate,true) // make sure regulate is on 
 //setState(ConfigData.SetWattsProperty, ConfigData.ACChargeWatts) // set device to charge off on restart
@@ -156,18 +150,34 @@ function CalcPower() {
         } else {
              if (debug) log ("Current demand: " +  NewValue + ' W');
         }    
+
+        // switch other device
+        
+        const weSwitch = ConfigData.statesPrefix + '.DeviceControlled'
+        const deviceControlledbyUs = getState(ConfigData.statesPrefix + '.DeviceControlled').val
         var es = getState(ConfigData.statesPrefix + '.EnableSwitching').val;
-        if (es == true && sleeping == false) {
-           let localDeviceToSwitch= ConfigData.DeviceToSwitch
+        let localDeviceToSwitch= ConfigData.DeviceToSwitch
             if (localDeviceToSwitch != "") {
             State = getState(localDeviceToSwitch).val
+        // if device control is switched off
+         if (debug) log ('deviceControlledbyUs:' + deviceControlledbyUs + 'es:' + es)
+           if (deviceControlledbyUs == true && es == false) {
+                SetChargeWatts(ConfigData.ACChargeWatts,0,true)
+                setState(localDeviceToSwitch,false )
+                setState(weSwitch,false)
+                if (debug) log ('switching device off, setting AC charge')
+            }
+        if (es == true && sleeping == false) {
             var localSolarChargeWatts = toInt(getState(ConfigData.statesPrefix + ".SolarChargeWatts").val)
             var localSolarExcess = localSolarChargeWatts + ConfigData.SolarExcessOffset
             var localSolarChargeWattsAlreadySet = getState(ConfigData.SetWattsProperty).val
+          
+
             if (NewValue < toFloat(0-localSolarExcess)) {
                 if (State == false) {
                  if (debug) log ('Excess big enough, switching device ' + ConfigData.DescDeviceToSwitch + ' on')                
                  setState(localDeviceToSwitch,true)
+                 setState(weSwitch, true)
                 } else {
                      if (debug) log ('Device ' + ConfigData.DescDeviceToSwitch + ' still on')
                 }
@@ -179,6 +189,7 @@ function CalcPower() {
                         } else {      
                             SetChargeWatts(ConfigData.ACChargeWatts,0,true)
                             setState(localDeviceToSwitch,false )
+                            setState(weSwitch,false)
                              if (debug) log ('Excess too small or no excess, switching device ' +  ConfigData.DescDeviceToSwitch + ' off')
                         }
                     } else { 
